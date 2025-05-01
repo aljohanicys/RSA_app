@@ -1,0 +1,213 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSA Encryption Tool</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>RSA Encryption/Decryption Tool</h1>
+
+        <div class="card">
+            <h2>Key Generation</h2>
+            <form id="keyGenForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="keySize">Key Size (bits):</label>
+                    <select id="keySize" name="keySize" class="form-control">
+                        <option value="1024">1024 - Faster but less secure</option>
+                        <option value="2048" selected>2048 - Recommended</option>
+                        <option value="4096">4096 - More secure but slower</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Generate Keys</button>
+            </form>
+            <div class="loader" id="keyGenLoader" style="display: none;"></div>
+        </div>
+
+        <div class="card" id="keysCard" style="display: none;">
+            <h2>Your Keys</h2>
+            <div class="key-container">
+                <h3>Public Key</h3>
+                <div class="key-display">
+                    <textarea id="publicKey" readonly></textarea>
+                    <button class="btn btn-sm" onclick="copyToClipboard('publicKey')">Copy</button>
+                </div>
+
+                <h3>Private Key</h3>
+                <div class="key-display">
+                    <textarea id="privateKey" readonly></textarea>
+                    <button class="btn btn-sm" onclick="copyToClipboard('privateKey')">Copy</button>
+                </div>
+                <div class="alert alert-warning">
+                    <strong>Warning:</strong> Keep your private key secure! Never share it with others.
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Encryption</h2>
+            <form id="encryptForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="encryptMessage">Message to Encrypt:</label>
+                    <textarea id="encryptMessage" name="message" class="form-control" rows="3" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="encryptKey">Public Key:</label>
+                    <textarea id="encryptKey" name="key" class="form-control" rows="5" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-success">Encrypt</button>
+            </form>
+            <div class="loader" id="encryptLoader" style="display: none;"></div>
+            <div id="encryptedResult" style="display: none;">
+                <h3>Encrypted Message</h3>
+                <div class="key-display">
+                    <textarea id="encryptedMessage" readonly></textarea>
+                    <button class="btn btn-sm" onclick="copyToClipboard('encryptedMessage')">Copy</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Decryption</h2>
+            <form id="decryptForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="decryptMessage">Encrypted Message (Base64):</label>
+                    <textarea id="decryptMessage" name="message" class="form-control" rows="3" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="decryptKey">Private Key:</label>
+                    <textarea id="decryptKey" name="key" class="form-control" rows="5" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Decrypt</button>
+            </form>
+            <div class="loader" id="decryptLoader" style="display: none;"></div>
+            <div id="decryptedResult" style="display: none;">
+                <h3>Decrypted Message</h3>
+                <div class="key-display">
+                    <textarea id="decryptedMessage" readonly></textarea>
+                    <button class="btn btn-sm" onclick="copyToClipboard('decryptedMessage')">Copy</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            element.select();
+            document.execCommand('copy');
+
+            // Show copy feedback
+            const originalText = element.nextElementSibling.textContent;
+            element.nextElementSibling.textContent = 'Copied!';
+            setTimeout(() => {
+                element.nextElementSibling.textContent = originalText;
+            }, 1500);
+        }
+
+        document.getElementById('keyGenForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const keySize = document.getElementById('keySize').value;
+            const loader = document.getElementById('keyGenLoader');
+
+            loader.style.display = 'block';
+
+            fetch('/generate-keys', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+                },
+                body: JSON.stringify({ keySize: keySize })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('publicKey').value = data.publicKey;
+                document.getElementById('privateKey').value = data.privateKey;
+                document.getElementById('keysCard').style.display = 'block';
+                loader.style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                loader.style.display = 'none';
+                alert('Error generating keys. Please try again.');
+            });
+        });
+
+        document.getElementById('encryptForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const message = document.getElementById('encryptMessage').value;
+            const key = document.getElementById('encryptKey').value;
+            const loader = document.getElementById('encryptLoader');
+
+            loader.style.display = 'block';
+
+            fetch('/encrypt', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+                },
+                body: JSON.stringify({ message: message, key: key })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    document.getElementById('encryptedMessage').value = data.encryptedMessage;
+                    document.getElementById('encryptedResult').style.display = 'block';
+                }
+                loader.style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                loader.style.display = 'none';
+                alert('Error encrypting message. Please try again.');
+            });
+        });
+
+        document.getElementById('decryptForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const message = document.getElementById('decryptMessage').value;
+            const key = document.getElementById('decryptKey').value;
+            const loader = document.getElementById('decryptLoader');
+
+            loader.style.display = 'block';
+
+            fetch('/decrypt', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+                },
+                body: JSON.stringify({ message: message, key: key })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    document.getElementById('decryptedMessage').value = data.decryptedMessage;
+                    document.getElementById('decryptedResult').style.display = 'block';
+                }
+                loader.style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                loader.style.display = 'none';
+                alert('Error decrypting message. Please try again.');
+            });
+        });
+    </script>
+</body>
+</html>
